@@ -62,12 +62,12 @@ if __name__ == '__main__':
     mall_id = common.get_mallID()
     # mall_id = ['5']
     # pools = common.get_CPU_num()
-    logger = common.bigdata_logger('ztm.log')
+    logger = common.bigdata_logger('dwd_shop_stat.log')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(dest="data_date", help='指定下载数据的时间范围 0：实时下载 1:前一天 2：指定日期范围')
-    parser.add_argument('-b', dest="begin_date", help='指定开始日期，2021-07-07')
-    parser.add_argument('-e', dest="end_date", help='指定开始日期，2021-07-17')
+    parser.add_argument(dest = "data_date", help = '指定下载数据的时间范围 1:前一天 2:指定日期范围')
+    parser.add_argument('-b', dest = "begin_date", help = '指定开始日期，2021-07-07')
+    parser.add_argument('-e', dest = "end_date", help = '指定结束日期，2021-07-17')
     args = parser.parse_args()
     logger.info('dwd_shop_stat_by_day starting ...')
     if args.data_date == '1':
@@ -76,14 +76,11 @@ if __name__ == '__main__':
         for mid in mall_id:
             shop_stat(begin_date, end_date, mid)  # 下载前日数据
     elif args.data_date == '2':
-        if args.begin_date and args.end_date:
+        if args.begin_date and args.end_date and args.begin_date <= args.end_date:
             for mid in mall_id:
-                if args.begin_date <= args.end_date:
-                    shop_stat(args.begin_date, args.end_date, mid)  # 批量下载多日数据
-                else:
-                    logger.error('开始日期[{}] 大于 结束日期[{}]，请重新输入日期范围！'.format(args.begin_date,args.end_date))
-                    exit(1)
+                shop_stat(args.begin_date, args.end_date, mid)  # 批量下载多日数据
         else:
+            logger.error('开始日期[{}] 大于 结束日期[{}]，请重新输入日期范围！'.format(args.begin_date,args.end_date))
             parser.print_help()
             exit(1)
     else:
