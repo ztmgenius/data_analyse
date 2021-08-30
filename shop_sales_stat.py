@@ -55,14 +55,13 @@ def shop_stat(beg_date, end_date, mid):
 
 
 
-
 if __name__ == '__main__':
     start_time = datetime.datetime.now()
     work_dir, connect_db, postgres_host, postgres_port, postgres_user, postgres_password, postgres_datebase = common.get_config()
     mall_id = common.get_mallID()
     # mall_id = ['5']
     # pools = common.get_CPU_num()
-    logger = common.bigdata_logger('dwd_shop_stat.log')
+    logger = common.bigdata_logger('analyse.log')
 
     parser = argparse.ArgumentParser()
     parser.add_argument(dest = "data_date", help = '指定下载数据的时间范围 1:前一天 2:指定日期范围')
