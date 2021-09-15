@@ -19,7 +19,7 @@ import json
 import numpy as np
 
 
-def sales_contribution_stat(mid):
+def sales_contribution_stat(mid,category_lvl,category):
     # 销售贡献：销售额、客单价、销售坪效、各级别会员消费
     # 租金贡献：租金坪效
     # 集客力：拉新人数、用户消费、支付人数
@@ -88,17 +88,17 @@ WITH  shop_prm as ( SELECT c.id AS sid,    c.mid,    f.prm_category_1, f.prm_cat
  SUM ( pay_amount_total )  as pay_amount_total  FROM mall{}.dwa_user_visit_shop_stat A  LEFT JOIN public.dwd_user_info b ON A.gid = b.gid  GROUP BY a.mid,A.sid, (CASE  WHEN b.grade_code is NULL THEN  1 ELSE  b.grade_code  END) ) a GROUP BY mid,sid) g ON g.sid=c.id
                     WHERE
                          a.mid = {} AND c.is_online = 't' and a.sid {} 
-                    GROUP BY a.mid,a.sid,b.area,e.pay_people,f.new_people,f.new_pay_amount,b.complaint,b.comment_score,g.vip1,g.vip2,g.vip3
-                    HAVING b.area is NOT NULL
+                    GROUP BY a.mid,a.sid,b.prm_category_1,b.prm_category_2,b.area,e.pay_people,f.new_people,f.new_pay_amount,b.complaint,b.comment_score,g.vip1,g.vip2,g.vip3
+                    HAVING b.area is NOT NULL and  b.prm_category_{} = {}
                     ;"""
 
-    delete_sql = """ DELETE FROM public.dwa_shop_value  a  WHERE a.mid = {} AND EXISTS (SELECT 1 FROM public.ods_shop WHERE a.sid=id AND is_online = 't') ; """
+    delete_sql = """ DELETE FROM public.dwa_shop_value  a  WHERE a.mid = {} and a.prm_category_id = {}  AND EXISTS (SELECT 1 FROM public.ods_shop WHERE a.sid=id AND is_online = 't') ; """
 
-    delete_data = delete_sql.format(mid)
+    delete_data = delete_sql.format(mid,category)
     common.execute_sql(delete_data)
 
     exclude_sid = common.get_sys_var("environment variables", "special_shop")
-    shop_sales_sql = shop_sales.format(mid,mid,mid,mid,mid,mid,exclude_sid)
+    shop_sales_sql = shop_sales.format(mid,mid,mid,mid,mid,mid,exclude_sid,category_lvl,category)
 
     # print(shop_sales_sql)
 
@@ -106,6 +106,43 @@ WITH  shop_prm as ( SELECT c.id AS sid,    c.mid,    f.prm_category_1, f.prm_cat
     shop_data = shop_data.fillna(0)
 
     return shop_data
+
+def prm_category(mid,category):
+    sql = """SELECT prm_category_{}  FROM public.dwd_shop_prm_category WHERE mid={} GROUP BY mid,prm_category_{} having count(*) > 1; """
+    category_sql =  sql.format(category,mid,category)
+    df = common.select_sql(category_sql)
+    category_list = df['prm_category_'+str(category)].tolist()
+    return category_list
+
+
+def data_cut_bak(df, colname, boxes, orderby):
+    # 根据自定义数值范围分箱
+    if orderby == 1 :
+        labels = [i + 1 for i in range(boxes)]
+    elif orderby == 2:
+        labels = [boxes - i for i in range(boxes)]
+    else:
+        logger.error('排序参数错误，正序=1，倒序=2'.format(orderby))
+
+    bins = list(np.linspace(df[colname].min(), df[colname].max(), num = boxes + 1, endpoint = True))
+    print(bins)
+    if df[colname].min() == df[colname].max() == 0:
+        #判断数据均为0时，处理bins和labels范围
+        bins =  list(range(boxes+1))
+        bins[-1] += 1
+        labels = list(reversed(labels))
+        # df[colname + '_score'] = pd.cut(df[colname], bins = bins, labels = labels, right = False).astype(float)
+
+    elif df[colname].min() == df[colname].max() and df[colname].max() != 0 :
+        ##判断数据相同且不为0时，更改bins范围
+        bins = list(range(boxes + 1))
+        bins[-1] += 1
+        # df[colname + '_score'] = pd.cut(df[colname], bins = bins, labels = labels, right = False).astype(float)
+
+    else:
+        bins[-1] += 1
+
+    df[colname + '_score'] = pd.cut(df[colname], bins = bins, labels = labels, right = False).astype(float)
 
 
 def data_cut(df, colname, boxes, orderby):
@@ -115,13 +152,20 @@ def data_cut(df, colname, boxes, orderby):
     elif orderby == 2:
         labels = [boxes - i for i in range(boxes)]
     else:
-        logger.error('排序参数错误，正序=1，倒序=2'.format(orderby))
-    if colname=='asdf':
-        pass
-    else:
-        bins = list(np.linspace(df[colname].min(), df[colname].max(), num=boxes+1, endpoint=True))
+        logger.error('排序参数错误:{}，正序=1，倒序=2'.format(orderby))
+    min = df[colname].min()
+    max = df[colname].max()
+    min = 0 if min is np.nan else min
+    max = 0 if max is np.nan else max
+    if min == max:
+        if min == 0:
+            max += 1
+        else:
+            min -= 1
+    bins = list(np.linspace(min, max, num = boxes + 1, endpoint = True))
     bins[-1] += 1
     df[colname + '_score'] = pd.cut(df[colname], bins = bins, labels = labels, right = False).astype(float)
+
 
 def data_qcut(df, colname, boxes):
     # 根据字段数值自动分箱
@@ -129,39 +173,41 @@ def data_qcut(df, colname, boxes):
     df[colname+'_score'] = pd.qcut(df[colname], boxes, precision=2, labels=labels).astype(float)
 
 
-
-
 if __name__ == '__main__':
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', None)
     work_dir, connect_db, postgres_host, postgres_port, postgres_user, postgres_password, postgres_datebase = common.get_config()
-    # mall_id = common.get_mallID()
-    # mall_id = [21]
-    mall_id = [2,3,5,7,9,11,19,21]
+    mall_id = [3,5,7,9,11,19,21]
+    mall_id = [5]
+    category_level = [1,2]
+    logger = common.bigdata_logger('analyse.log')
+
     for mid in mall_id:
-        logger = common.bigdata_logger('analyse.log')
-        shop_data = sales_contribution_stat(mid)
-        data_cut(shop_data, 'sales', 10,1)
-        data_cut(shop_data, 'kedanjia', 2,1)
-        data_cut(shop_data, 'sales_efficiency', 8,1)
-        data_cut(shop_data, 'sales_area', 20,1)
-        data_cut(shop_data, 'refund', 10, 2)
-        data_cut(shop_data, 'pay_person', 15, 1)
-        data_cut(shop_data, 'new_person', 10, 1)
-        data_qcut(shop_data, 'new_person_pay', 5)
-        data_cut(shop_data, 'comment', 5,1)
-        data_cut(shop_data, 'vip1', 2,1)
-        data_cut(shop_data, 'vip2', 3,1)
-        data_cut(shop_data, 'vip3', 5,1)
-        if shop_data['complaint'].drop_duplicates().count() > 1:
-            data_cut(shop_data, 'complaint', 5,2)
-        else:
-            shop_data['complaint'].replace(0,5,inplace = True)
-        shop_data['composite_score'] = shop_data.iloc[:, 15:].sum(axis = 1)
-
-        # print(shop_data)
-
-        if common.insert_to_DB_from_DF(shop_data, 'public.dwa_shop_value', 1000) == 1:
-            logger.error('插入 public.dwa_shop_value 数据失败，mid= {}'.format(mid))
-
-    logger.info('mid={},插入 {} 条数据'.format(mall_id, len(shop_data)))
+        logger.info('mid={},starting'.format(mall_id))
+        for category_lvl in category_level:
+            logger.info('mid={},category_level={},starting'.format(mall_id, category_lvl))
+            for category  in prm_category(mid,category_lvl):
+                logger.info('mid={},category_level={},category={} starting'.format(mall_id, category_lvl, category))
+                shop_data = sales_contribution_stat(mid,category_lvl, category)
+                data_cut(shop_data, 'sales', 10,1)
+                data_cut(shop_data, 'kedanjia', 2,1)
+                data_cut(shop_data, 'sales_efficiency', 8,1)
+                data_cut(shop_data, 'sales_area', 20,1)
+                data_cut(shop_data, 'pay_person', 15, 1)
+                data_cut(shop_data, 'new_person', 10, 1)
+                data_cut(shop_data, 'new_person_pay', 5,1)
+                data_cut(shop_data, 'pay_person', 15, 1)
+                data_cut(shop_data, 'new_person', 10, 1)
+                data_cut(shop_data, 'new_person_pay', 5, 1)
+                data_cut(shop_data, 'complaint', 5, 2)
+                data_cut(shop_data, 'comment', 5, 1)
+                data_cut(shop_data, 'refund', 10, 2)
+                data_cut(shop_data, 'vip1', 2, 1)
+                data_cut(shop_data, 'vip2', 3, 1)
+                data_cut(shop_data, 'vip3', 5, 1)
+                shop_data['composite_score'] = shop_data.iloc[:, 15:].sum(axis = 1)
+                shop_data['category_level'] = category_lvl
+                shop_data['prm_category_id'] = category
+                if common.insert_to_DB_from_DF(shop_data, 'public.dwa_shop_value', 1000) == 1:
+                    logger.error('插入 public.dwa_shop_value 数据失败，mid= {}, category = {}'.format(mid,category))
+        logger.info('mid={},数据生成完毕'.format(mall_id))
