@@ -177,17 +177,17 @@ if __name__ == '__main__':
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', None)
     work_dir, connect_db, postgres_host, postgres_port, postgres_user, postgres_password, postgres_datebase = common.get_config()
-    mall_id = [3,5,7,9,11,19,21]
-    mall_id = [5]
+    mall_id = [2,3,5,7,9,11,19,21]
+    # mall_id = [5]
     category_level = [1,2]
     logger = common.bigdata_logger('analyse.log')
 
     for mid in mall_id:
         logger.info('mid={},starting'.format(mall_id))
         for category_lvl in category_level:
-            logger.info('mid={},category_level={},starting'.format(mall_id, category_lvl))
+            logger.info('mid={},category_level={},starting'.format(mid, category_lvl))
             for category  in prm_category(mid,category_lvl):
-                logger.info('mid={},category_level={},category={} starting'.format(mall_id, category_lvl, category))
+                logger.info('mid={},category_level={},category={} starting'.format(mid, category_lvl, category))
                 shop_data = sales_contribution_stat(mid,category_lvl, category)
                 data_cut(shop_data, 'sales', 10,1)
                 data_cut(shop_data, 'kedanjia', 2,1)
@@ -210,4 +210,4 @@ if __name__ == '__main__':
                 shop_data['prm_category_id'] = category
                 if common.insert_to_DB_from_DF(shop_data, 'public.dwa_shop_value', 1000) == 1:
                     logger.error('插入 public.dwa_shop_value 数据失败，mid= {}, category = {}'.format(mid,category))
-        logger.info('mid={},数据生成完毕'.format(mall_id))
+        logger.info('mid={},数据生成完毕'.format(mid))
