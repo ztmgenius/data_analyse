@@ -114,36 +114,6 @@ def prm_category(mid, category):
     return category_list
 
 
-def data_cut_bak(df, colname, boxes, orderby):
-    # 根据自定义数值范围分箱
-    if orderby == 1:
-        labels = [i + 1 for i in range(boxes)]
-    elif orderby == 2:
-        labels = [boxes - i for i in range(boxes)]
-    else:
-        logger.error('排序参数错误，正序=1，倒序=2'.format(orderby))
-
-    bins = list(np.linspace(df[colname].min(), df[colname].max(), num = boxes + 1, endpoint = True))
-    print(bins)
-    if df[colname].min() == df[colname].max() == 0:
-        # 判断数据均为0时，处理bins和labels范围
-        bins = list(range(boxes + 1))
-        bins[-1] += 1
-        labels = list(reversed(labels))
-        # df[colname + '_score'] = pd.cut(df[colname], bins = bins, labels = labels, right = False).astype(float)
-
-    elif df[colname].min() == df[colname].max() and df[colname].max() != 0:
-        ##判断数据相同且不为0时，更改bins范围
-        bins = list(range(boxes + 1))
-        bins[-1] += 1
-        # df[colname + '_score'] = pd.cut(df[colname], bins = bins, labels = labels, right = False).astype(float)
-
-    else:
-        bins[-1] += 1
-
-    df[colname + '_score'] = pd.cut(df[colname], bins = bins, labels = labels, right = False).astype(float)
-
-
 def data_cut(df, colname, boxes, orderby):
     # 根据自定义数值范围分箱
     if orderby == 1:
@@ -172,50 +142,69 @@ def data_qcut(df, colname, boxes):
     df[colname + '_score'] = pd.qcut(df[colname], boxes, precision = 2, labels = labels).astype(float)
 
 
+def mall_brank_value(mid):
+    logger.info('mid={},starting'.format(mid))
+    shop_all = sales_contribution_stat(mid)
+    for category_lvl in category_level:
+        logger.info('mid={},category_level={},starting'.format(mid, category_lvl))
+        for category in prm_category(mid, category_lvl):
+            logger.info('mid={},category_level={},category={} starting'.format(mid, category_lvl, category))
+            shop_data = shop_all[shop_all['prm_category_' + str(category_lvl)] == category].copy()
+            data_cut(shop_data, 'sales', 10, 1)
+            data_cut(shop_data, 'kedanjia', 2, 1)
+            data_cut(shop_data, 'sales_efficiency', 8, 1)
+            data_cut(shop_data, 'sales_area', 20, 1)
+            data_cut(shop_data, 'pay_person', 15, 1)
+            data_cut(shop_data, 'new_person', 10, 1)
+            data_cut(shop_data, 'new_person_pay', 5, 1)
+            data_cut(shop_data, 'pay_person', 15, 1)
+            data_cut(shop_data, 'new_person', 10, 1)
+            data_cut(shop_data, 'new_person_pay', 5, 1)
+            data_cut(shop_data, 'complaint', 5, 2)
+            data_cut(shop_data, 'comment', 5, 1)
+            data_cut(shop_data, 'refund', 10, 2)
+            data_cut(shop_data, 'vip1', 2, 1)
+            data_cut(shop_data, 'vip2', 3, 1)
+            data_cut(shop_data, 'vip3', 5, 1)
+            shop_data['composite_score'] = shop_data.iloc[:, 17:].sum(axis = 1)
+            shop_data['category_level'] = category_lvl
+            shop_data['prm_category_id'] = category
+
+            shop_data.drop(labels = ['prm_category_1', "prm_category_2"], axis = 1, inplace = True)
+            delete_data = f""" DELETE FROM public.dwa_shop_value a WHERE a.mid ={mid} 
+                        and a.prm_category_id = {category} and a.category_level={category_lvl}
+                        AND EXISTS (SELECT 1 FROM public.ods_shop WHERE a.sid=id AND is_online = 't') ; """
+            common.execute_sql(delete_data)
+            if common.insert_to_DB_from_DF(shop_data, 'public.dwa_shop_value', 1000) == 1:
+                logger.error('插入 public.dwa_shop_value 数据失败，mid= {}, category = {}'.format(mid, category))
+    logger.info('mid={},数据生成完毕'.format(mid))
+
+
+def test():  # 用于调试单个或多个mall
+    mall_id = ['5']
+    for i in mall_id:
+        mall_brank_value(i)
+    logger.info("Total duration of brand value:{0}".format(datetime.datetime.now() - start_time))
+    sys.exit(0)
+
+
 if __name__ == '__main__':
     start_time = datetime.datetime.now()
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', None)
     work_dir, connect_db, postgres_host, postgres_port, postgres_user, postgres_password, postgres_datebase = common.get_config()
-    mall_id = [2, 3, 5, 7, 9, 11, 19, 21]
-    # mall_id = [5]
+    mall_id = common.get_mallID()
+    mall_id = [i for i in mall_id if i != '6' and i != '18']
     category_level = [1, 2]
     logger = common.bigdata_logger('analyse.log')
 
-    for mid in mall_id:
-        logger.info('mid={},starting'.format(mid))
-        shop_all = sales_contribution_stat(mid)
-        for category_lvl in category_level:
-            logger.info('mid={},category_level={},starting'.format(mid, category_lvl))
-            for category in prm_category(mid, category_lvl):
-                logger.info('mid={},category_level={},category={} starting'.format(mid, category_lvl, category))
-                shop_data = shop_all[shop_all['prm_category_' + str(category_lvl)] == category].copy()
-                data_cut(shop_data, 'sales', 10, 1)
-                data_cut(shop_data, 'kedanjia', 2, 1)
-                data_cut(shop_data, 'sales_efficiency', 8, 1)
-                data_cut(shop_data, 'sales_area', 20, 1)
-                data_cut(shop_data, 'pay_person', 15, 1)
-                data_cut(shop_data, 'new_person', 10, 1)
-                data_cut(shop_data, 'new_person_pay', 5, 1)
-                data_cut(shop_data, 'pay_person', 15, 1)
-                data_cut(shop_data, 'new_person', 10, 1)
-                data_cut(shop_data, 'new_person_pay', 5, 1)
-                data_cut(shop_data, 'complaint', 5, 2)
-                data_cut(shop_data, 'comment', 5, 1)
-                data_cut(shop_data, 'refund', 10, 2)
-                data_cut(shop_data, 'vip1', 2, 1)
-                data_cut(shop_data, 'vip2', 3, 1)
-                data_cut(shop_data, 'vip3', 5, 1)
-                shop_data['composite_score'] = shop_data.iloc[:, 17:].sum(axis = 1)
-                shop_data['category_level'] = category_lvl
-                shop_data['prm_category_id'] = category
+    # test()
 
-                shop_data.drop(labels = ['prm_category_1', "prm_category_2"], axis = 1, inplace = True)
-                delete_data = f""" DELETE FROM public.dwa_shop_value a WHERE a.mid ={mid} 
-                            and a.prm_category_id = {category} and a.category_level={category_lvl}
-                            AND EXISTS (SELECT 1 FROM public.ods_shop WHERE a.sid=id AND is_online = 't') ; """
-                common.execute_sql(delete_data)
-                if common.insert_to_DB_from_DF(shop_data, 'public.dwa_shop_value', 1000) == 1:
-                    logger.error('插入 public.dwa_shop_value 数据失败，mid= {}, category = {}'.format(mid, category))
-        logger.info('mid={},数据生成完毕'.format(mid))
+    po = Pool(5)  # 定义个进程池
+    for i in mall_id:
+        po.apply_async(mall_brank_value, (i,), error_callback=common.pool_call_back)
+        time.sleep(1)
+    po.close()
+    po.join()
+
     logger.info("Brand value Total duration {}".format(datetime.datetime.now() - start_time))
