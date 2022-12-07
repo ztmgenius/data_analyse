@@ -22,8 +22,9 @@ import db
 def shop_stat(beg_date, end_date, mid):
 
     shop_stat_sql = """ SELECT m.trade_date stat_date,m.mid,m.sid,s.area,m.sales_amount,m.order_num,m.pay_person ,n.refund_order,n.refund_amount,m.prm_category_1,m.prm_category_2 FROM 
-    (SELECT	trade_date,	mid,sid,prm_category_1,	prm_category_2,	SUM ( origin_amount ) sales_amount,	COUNT ( DISTINCT gid ) pay_person,	COUNT ( order_no ) order_num
-     FROM mall{}.dwd_order_with_category GROUP BY trade_date,mid,sid,prm_category_1,prm_category_2) m	
+    (SELECT	a.trade_date, a.mid, a.sid, a.prm_category_1,a.prm_category_2,SUM ( a.origin_amount ) sales_amount,	COUNT(DISTINCT a.gid) pay_person, COUNT(a.order_no) order_num
+    	
+     FROM mall{}.dwd_order_with_category a   GROUP BY a.trade_date,a.mid,a.sid,a.prm_category_1,a.prm_category_2) m	
     LEFT JOIN   
     (SELECT a.trade_date,a.mid,a.sid,sum(origin_amount) refund_amount,count(order_no) refund_order FROM mall{}.dwd_order_with_category a WHERE EXISTS (SELECT 1 FROM mall{}.ods_refund_info b WHERE a.order_no=b.order_no)
      GROUP BY a.trade_date,	a.mid,a.sid) n	ON m.trade_date=n.trade_date AND m.mid=n.mid AND m.sid=n.sid
@@ -38,7 +39,7 @@ def shop_stat(beg_date, end_date, mid):
     # data = database.select(sql, conn)
     # database.close(conn)
     data = common.select_sql(sql)
-    if data is None or len(data) == 0 :
+    if data is None or len(data) == 0:
         logger.warning("No data.")
         return -1
 
@@ -73,11 +74,11 @@ if __name__ == '__main__':
         begin_date = (datetime.date.today() + datetime.timedelta(days=-1)).strftime("%Y-%m-%d")
         end_date = begin_date
         for mid in mall_id:
-            shop_stat(begin_date, end_date, mid)  # 下载前日数据
+            shop_stat(begin_date, end_date, mid)
     elif args.data_date == '2':
         if args.begin_date and args.end_date and args.begin_date <= args.end_date:
             for mid in mall_id:
-                shop_stat(args.begin_date, args.end_date, mid)  # 批量下载多日数据
+                shop_stat(args.begin_date, args.end_date, mid)
         else:
             logger.error('开始日期[{}] 大于 结束日期[{}]，请重新输入日期范围！'.format(args.begin_date,args.end_date))
             parser.print_help()
